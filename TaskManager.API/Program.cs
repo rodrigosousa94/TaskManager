@@ -1,20 +1,37 @@
 using Microsoft.EntityFrameworkCore;
-using TaskManager.Infrastructure.Data;
-using TaskManager.Domain.Interfaces;
-using TaskManager.Infrastructure.Repositories;
+using System.Collections;
 using TaskManager.Application.Interfaces;
 using TaskManager.Application.Services;
+using TaskManager.Domain.Interfaces;
+using TaskManager.Infrastructure.Data;
+using TaskManager.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Database (MySQL)
+
+string ReplaceEnvVars(string conn)
+{
+    foreach (DictionaryEntry env in Environment.GetEnvironmentVariables())
+    {
+        string key = "${" + env.Key + "}";
+        if (conn.Contains(key))
+            conn = conn.Replace(key, env.Value?.ToString());
+    }
+    return conn;
+}
+
+var rawConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var finalConnectionString = ReplaceEnvVars(rawConnectionString);
+
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
+        finalConnectionString,
         new MySqlServerVersion(new Version(8, 0, 39))
-    ));
+    )
+);
 
-// Dependencies
+
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 
@@ -23,6 +40,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
 
 if (app.Environment.IsDevelopment())
 {

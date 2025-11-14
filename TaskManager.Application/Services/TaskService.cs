@@ -1,8 +1,8 @@
 ﻿using TaskManager.Application.DTOs;
 using TaskManager.Application.Interfaces;
 using TaskManager.Domain.Entities;
+using TaskManager.Domain.Enums;
 using TaskManager.Domain.Interfaces;
-using TaskManager.Infrastructure.Repositories;
 
 namespace TaskManager.Application.Services
 {
@@ -33,12 +33,8 @@ namespace TaskManager.Application.Services
             {
                 Title = dto.Title,
                 Description = dto.Description,
-                Status = dto.Status,
-                CompletedAt = dto.CompletedAt
+                Status = dto.Status
             };
-
-            if (task.CompletedAt.HasValue && task.CompletedAt < task.CreatedAt)
-                throw new ArgumentException("Completion date cannot be earlier than creation date.");
 
             await _repository.AddAsync(task);
             return new TaskResponseDto(task);
@@ -46,21 +42,23 @@ namespace TaskManager.Application.Services
 
         public async Task<TaskResponseDto> UpdateAsync(int id, TaskUpdateDto dto)
         {
-            var existing = await _repository.GetByIdAsync(id)
-                ?? throw new KeyNotFoundException("Task not found.");
+            var existingTask = await _repository.GetByIdAsync(id);
 
-            if (dto.CompletedAt.HasValue && dto.CompletedAt < existing.CreatedAt)
-                throw new ArgumentException("Completion date cannot be earlier than creation date.");
+            if (existingTask == null)
+                throw new KeyNotFoundException("Task not found.");
 
-            existing.Title = dto.Title;
-            existing.Description = dto.Description;
-            existing.Status = dto.Status;
-            existing.CompletedAt = dto.CompletedAt;
+            existingTask.Title = dto.Title;
+            existingTask.Description = dto.Description;
+            existingTask.SetStatus(dto.Status);
 
-            await _repository.UpdateAsync(existing);
-            return new TaskResponseDto(existing);
+            await _repository.UpdateAsync(existingTask);
+
+            return new TaskResponseDto(existingTask);
         }
 
-        public async Task DeleteAsync(int id) => await _repository.DeleteAsync(id);
+        public async Task DeleteAsync(int id)
+        {
+            await _repository.DeleteAsync(id);
+        }
     }
 }

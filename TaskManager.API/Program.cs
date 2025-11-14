@@ -8,7 +8,9 @@ using TaskManager.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-
+// ==========================
+// Replace ${VAR} with environment variables
+// ==========================
 string ReplaceEnvVars(string conn)
 {
     foreach (DictionaryEntry env in Environment.GetEnvironmentVariables())
@@ -23,15 +25,17 @@ string ReplaceEnvVars(string conn)
 var rawConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var finalConnectionString = ReplaceEnvVars(rawConnectionString);
 
-
+// ==========================
+// Database
+// ==========================
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
         finalConnectionString,
-        new MySqlServerVersion(new Version(8, 0, 39))
+        ServerVersion.AutoDetect(finalConnectionString)
     )
 );
 
-
+// ==========================
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 
@@ -39,8 +43,24 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-var app = builder.Build();
+// ==========================
+// CORS
+// ==========================
+var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: MyAllowSpecificOrigins,
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:5173")
+                  .AllowAnyHeader()
+                  .AllowAnyMethod()
+                  .AllowCredentials();
+        });
+});
+
+var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
@@ -48,6 +68,23 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+app.UseCors(MyAllowSpecificOrigins);
+
+// ==========================
+// Auto-migrate on startup
+// ==========================
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
+
+// ==========================
+// Force Railway PORT
+// ==========================
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+app.Urls.Add($"http://*:{port}");
+
+// ==========================
 app.MapControllers();
 app.Run();

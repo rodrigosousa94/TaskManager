@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using System.Collections;
 using TaskManager.Application.Interfaces;
 using TaskManager.Application.Services;
@@ -8,9 +8,7 @@ using TaskManager.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ==========================
-// Replace ${VAR} with environment variables
-// ==========================
+// Troca variáveis de ambiente no connection string
 string ReplaceEnvVars(string conn)
 {
     foreach (DictionaryEntry env in Environment.GetEnvironmentVariables())
@@ -25,66 +23,50 @@ string ReplaceEnvVars(string conn)
 var rawConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 var finalConnectionString = ReplaceEnvVars(rawConnectionString);
 
-// ==========================
-// Database
-// ==========================
+// DB
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
         finalConnectionString,
-        ServerVersion.AutoDetect(finalConnectionString)
+        new MySqlServerVersion(new Version(8, 0, 39))
     )
 );
 
-// ==========================
+// Serviços
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 
+// Controllers
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// ==========================
-// CORS
-// ==========================
-var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
-
+// 🔥 Configuração de CORS correta
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(name: MyAllowSpecificOrigins,
+    options.AddPolicy("AllowAll",
         policy =>
         {
-            policy.WithOrigins("http://localhost:5173")
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials();
+            policy
+                .AllowAnyOrigin()
+                .AllowAnyMethod()
+                .AllowAnyHeader();
         });
 });
 
 var app = builder.Build();
 
+// Swagger
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-app.UseCors(MyAllowSpecificOrigins);
+// 🔥 Ativar CORS antes dos controllers
+app.UseCors("AllowAll");
 
-// ==========================
-// Auto-migrate on startup
-// ==========================
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
-}
+app.UseHttpsRedirection();
 
-// ==========================
-// Force Railway PORT
-// ==========================
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-app.Urls.Add($"http://*:{port}");
-
-// ==========================
 app.MapControllers();
+
 app.Run();
